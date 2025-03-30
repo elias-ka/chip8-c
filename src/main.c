@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "util.h"
 
@@ -11,28 +12,33 @@ int main(int argc, const char **argv)
 {
     srand(time(NULL));
 
-    if (argc != 2) {
-        die("Usage: %s <rom>\n", argv[0]);
+    if (argc < 2) {
+        die("Usage: %s <program>\n", argv[0]);
     }
 
-    const char *rom = argv[1];
-    FILE *file = fopen(rom, "rb");
+    const char *prog_path = argv[1];
+    FILE *file = fopen(prog_path, "rb");
     if (!file) {
         die("%s", strerror(errno));
     }
 
     fseek(file, 0, SEEK_END);
-    const size_t rom_size = (size_t)ftell(file);
+    const size_t prog_size = (size_t)ftell(file);
     rewind(file);
 
-    uint8_t *rom_data = xcalloc(rom_size, 1);
-    if (fread(rom_data, 1, rom_size, file) < rom_size) {
+    if (prog_size > MEMORY_SIZE) {
+        die("Program exceeds the maximum size of 4096 bytes.");
+    }
+
+    uint8_t *prog_data = xcalloc(prog_size, 1);
+    const uint32_t bytes_read = fread(prog_data, 1, prog_size, file);
+    if (bytes_read < prog_size || ferror(file)) {
         die("Could not read file");
     }
     fclose(file);
 
     struct chip8 chip8 = {0};
-    chip8_init(&chip8, rom_data, rom_size);
+    chip8_init(&chip8, prog_data, prog_size);
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         die("SDL_Init: %s", SDL_GetError());
@@ -72,7 +78,7 @@ int main(int argc, const char **argv)
             }
         }
 
-        for (int i = 0; i < 20; ++i) {
+        for (int i = 0; i < 15; ++i) {
             chip8_step(&chip8);
         }
 
@@ -86,7 +92,7 @@ int main(int argc, const char **argv)
         SDL_RenderPresent(renderer);
     }
 
-    free(rom_data);
+    free(prog_data);
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(win);
